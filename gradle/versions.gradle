@@ -1,0 +1,84 @@
+dependencyManagement {
+  dependencies {
+    dependency 'org.hyperledger.besu.internal:api:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:besu:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:blockcreation:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:core:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:common:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:config:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:crypto:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:enclave:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:eth:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:ibft:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:metrics-core:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:nat:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:p2p:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:permissioning:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:plugins-rocksdb:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:rlp:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:stratum:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:trie:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:util:1.4.8-SNAPSHOT'
+    dependency 'org.hyperledger.besu:plugin-api:1.4.8-SNAPSHOT'
+
+    dependency 'com.fasterxml.jackson.core:jackson-databind:2.11.0'
+    dependency 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.11.0'
+
+    dependency 'com.google.errorprone:error_prone_annotation:2.3.3'
+    dependency 'com.google.errorprone:error_prone_check_api:2.3.3'
+    dependency 'com.google.errorprone:error_prone_core:2.3.3'
+    dependency 'com.google.errorprone:error_prone_test_helpers:2.3.3'
+
+    dependency 'com.google.guava:guava:28.1-jre'
+
+    dependency 'com.graphql-java:graphql-java:13.0'
+    
+    dependency 'com.splunk.logging:splunk-library-javalogging:1.8.0'
+    
+    dependency 'info.picocli:picocli:4.1.4'
+
+    dependency 'io.vertx:vertx-auth-jwt:3.8.5'
+    dependency 'io.vertx:vertx-codegen:3.8.5'
+    dependency 'io.vertx:vertx-core:3.8.5'
+    dependency 'io.vertx:vertx-unit:3.8.5'
+    dependency 'io.vertx:vertx-web:3.8.5'
+
+    dependency 'org.apache.commons:commons-compress:1.20'
+    dependency 'org.apache.commons:commons-text:1.8'
+
+    dependency 'org.apache.logging.log4j:log4j-api:2.13.2'
+    dependency 'org.apache.logging.log4j:log4j-core:2.13.2'
+    dependency 'org.apache.logging.log4j:log4j-slf4j-impl:2.13.2'
+
+    dependency 'org.bouncycastle:bcpkix-jdk15on:1.64'
+    dependency 'org.bouncycastle:bcprov-jdk15on:1.64'
+
+    dependency 'org.hyperledger.besu:altbn128:0.2.0'
+    dependency 'org.hyperledger.besu:bls12-381:0.2.0'
+    dependency 'org.hyperledger.besu:secp256k1:0.2.0'
+
+    dependency 'org.mockito:mockito-core:3.2.4'
+
+    dependency 'org.openjdk.jmh:jmh-core:1.22'
+    dependency 'org.openjdk.jmh:jmh-generator-annprocess:1.22'
+
+    dependency 'org.rocksdb:rocksdbjni:6.4.6'
+
+    dependency 'org.slf4j:slf4j-log4j12:1.7.26'
+
+    dependency 'org.springframework.security:spring-security-crypto:5.2.1.RELEASE'
+
+    dependency 'org.web3j:abi:4.5.15'
+    dependency 'org.web3j:besu:4.5.15'
+    dependency 'org.web3j:core:4.5.15'
+    dependency 'org.web3j:crypto:4.5.15'
+
+    dependency 'org.xerial.snappy:snappy-java:1.1.7.3'
+
+    dependency 'org.yaml:snakeyaml:1.26'
+
+    dependency 'tech.pegasys.ethsigner.internal:core:0.4.0'
+    dependency 'tech.pegasys.ethsigner.internal:file-based:0.4.0'
+    dependency 'tech.pegasys.ethsigner.internal:signing-api:0.4.0'
+  }
+}
