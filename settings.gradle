@@ -1,3 +1,4 @@
 rootProject.name = 'khipu'
 
 include 'khipu-besu'
+include 'khipu-crypto'
