@@ -15,6 +15,7 @@ dependencyManagement {
     dependency 'org.hyperledger.besu.internal:p2p:1.5.2-SNAPSHOT'
     dependency 'org.hyperledger.besu.internal:permissioning:1.5.2-SNAPSHOT'
     dependency 'org.hyperledger.besu.internal:plugins-rocksdb:1.5.2-SNAPSHOT'
+    dependency 'org.hyperledger.besu.internal:retesteth:1.5.2-SNAPSHOT'
     dependency 'org.hyperledger.besu.internal:rlp:1.5.2-SNAPSHOT'
     dependency 'org.hyperledger.besu.internal:stratum:1.5.2-SNAPSHOT'
     dependency 'org.hyperledger.besu.internal:trie:1.5.2-SNAPSHOT'
