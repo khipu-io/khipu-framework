@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import khipu.ProtocolContextFactory;
 import khipu.chainimport.JsonBlockImporter;
 import khipu.chainimport.RlpBlockImporter;
 import khipu.cli.BesuCommand;
@@ -71,7 +70,6 @@ public class BlocksSubCommand implements Runnable {
   @Spec
   private CommandSpec spec; // Picocli injects reference to command spec
 
-  private final ProtocolContextFactory protocolContextFactory;
   private final Supplier<RlpBlockImporter> rlpBlockImporter;
   private final Function<BesuController, JsonBlockImporter> jsonBlockImporterFactory;
   private final Function<Blockchain, RlpBlockExporter> rlpBlockExporterFactory;
@@ -79,12 +77,10 @@ public class BlocksSubCommand implements Runnable {
   private final PrintStream out;
 
   public BlocksSubCommand(
-      final ProtocolContextFactory protocolContextFactory,
       final Supplier<RlpBlockImporter> rlpBlockImporter,
       final Function<BesuController, JsonBlockImporter> jsonBlockImporterFactory,
       final Function<Blockchain, RlpBlockExporter> rlpBlockExporterFactory,
       final PrintStream out) {
-    this.protocolContextFactory = protocolContextFactory;
     this.rlpBlockImporter = rlpBlockImporter;
     this.rlpBlockExporterFactory = rlpBlockExporterFactory;
     this.jsonBlockImporterFactory = jsonBlockImporterFactory;
@@ -121,7 +117,7 @@ public class BlocksSubCommand implements Runnable {
         paramLabel = DefaultCommandValues.MANDATORY_FILE_FORMAT_HELP,
         description = "File containing blocks to import.",
         arity = "0..*")
-    private final List<Path> blockImportFileOption = blockImportFiles;
+    private final List<Path> blockImportFileOption = new ArrayList<>();
 
     @Option(
         names = "--format",
@@ -145,6 +141,22 @@ public class BlocksSubCommand implements Runnable {
     @Option(names = "--run", description = "Start besu after importing.")
     private final Boolean runBesu = false;
 
+    @Option(
+        names = "--start-block",
+        paramLabel = DefaultCommandValues.MANDATORY_LONG_FORMAT_HELP,
+        description =
+            "The starting index of the block, or block list to import.  If not specified all blocks before the end block will be imported",
+        arity = "1..1")
+    private final Long startBlock = 0L;
+
+    @Option(
+        names = "--end-block",
+        paramLabel = DefaultCommandValues.MANDATORY_LONG_FORMAT_HELP,
+        description =
+            "The ending index of the block list to import (exclusive).  If not specified all blocks after the start block will be imported.",
+        arity = "1..1")
+    private final Long endBlock = Long.MAX_VALUE;
+
     @SuppressWarnings("unused")
     @Spec
     private CommandSpec spec;
@@ -152,18 +164,18 @@ public class BlocksSubCommand implements Runnable {
     @Override
     public void run() {
       parentCommand.parentCommand.configureLogging(false);
+      blockImportFiles.addAll(blockImportFileOption);
 
       checkCommand(parentCommand);
       checkNotNull(parentCommand.rlpBlockImporter);
       checkNotNull(parentCommand.jsonBlockImporterFactory);
-      if (blockImportFileOption.isEmpty()) {
+      if (blockImportFiles.isEmpty()) {
         throw new ParameterException(spec.commandLine(), "No files specified to import.");
       }
       LOG.info("Import {} block data from {} files", format, blockImportFiles.size());
       final Optional<MetricsService> metricsService = initMetrics(parentCommand);
 
-      try (final BesuController controller =
-          createController(parentCommand.protocolContextFactory)) {
+      try (final BesuController controller = createController()) {
         for (final Path path : blockImportFiles) {
           try {
             LOG.info("Importing from {}", path);
@@ -205,7 +217,7 @@ public class BlocksSubCommand implements Runnable {
       checkNotNull(parentCommand.parentCommand);
     }
 
-    private BesuController createController(ProtocolContextFactory protocolContextiFactory) {
+    private BesuController createController() {
       try {
         // Set some defaults
         return parentCommand
@@ -214,7 +226,7 @@ public class BlocksSubCommand implements Runnable {
             // set to mainnet genesis block so validation rules won't reject it.
             .clock(Clock.fixed(Instant.ofEpochSecond(startTime), ZoneOffset.UTC))
             .miningParameters(getMiningParameters())
-            .build(protocolContextiFactory);
+            .build();
       } catch (final Exception e) {
         throw new ExecutionException(new CommandLine(parentCommand), e.getMessage(), e);
       }
@@ -251,7 +263,7 @@ public class BlocksSubCommand implements Runnable {
     private void importRlpBlocks(final BesuController controller, final Path path)
         throws IOException {
       try (final RlpBlockImporter rlpBlockImporter = parentCommand.rlpBlockImporter.get()) {
-        rlpBlockImporter.importBlockchain(path, controller, skipPow);
+        rlpBlockImporter.importBlockchain(path, controller, skipPow, startBlock, endBlock);
       }
     }
   }

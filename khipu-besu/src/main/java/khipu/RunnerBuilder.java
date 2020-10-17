@@ -24,6 +24,7 @@ import khipu.controller.BesuController;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
+import com.google.common.base.Strings;
 import org.hyperledger.besu.BesuInfo;
 import org.hyperledger.besu.cli.config.EthNetworkConfig;
 import org.hyperledger.besu.crypto.NodeKey;
@@ -58,11 +59,14 @@ import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.api.query.PrivacyQueries;
 import org.hyperledger.besu.ethereum.blockcreation.MiningCoordinator;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
+import org.hyperledger.besu.ethereum.core.Account;
+import org.hyperledger.besu.ethereum.core.Address;
 import org.hyperledger.besu.ethereum.core.MiningParameters;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.core.Synchronizer;
 import org.hyperledger.besu.ethereum.eth.transactions.TransactionPool;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
+import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.OnChainPrivacyPrecompiledContract;
 import org.hyperledger.besu.ethereum.p2p.config.DiscoveryConfiguration;
 import org.hyperledger.besu.ethereum.p2p.config.NetworkingConfiguration;
 import org.hyperledger.besu.ethereum.p2p.config.RlpxConfiguration;
@@ -88,9 +92,12 @@ import org.hyperledger.besu.ethereum.permissioning.account.AccountPermissioningC
 import org.hyperledger.besu.ethereum.permissioning.node.InsufficientPeersPermissioningProvider;
 import org.hyperledger.besu.ethereum.permissioning.node.NodePermissioningController;
 import org.hyperledger.besu.ethereum.permissioning.node.PeerPermissionsAdapter;
+import org.hyperledger.besu.ethereum.privacy.PrivateTransactionObserver;
 import org.hyperledger.besu.ethereum.stratum.StratumServer;
 import org.hyperledger.besu.ethereum.transaction.TransactionSimulator;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
+import org.hyperledger.besu.ethstats.EthStatsService;
+import org.hyperledger.besu.ethstats.util.NetstatsUrl;
 import org.hyperledger.besu.metrics.ObservableMetricsSystem;
 import org.hyperledger.besu.metrics.prometheus.MetricsConfiguration;
 import org.hyperledger.besu.metrics.prometheus.MetricsService;
@@ -121,12 +128,15 @@ public class RunnerBuilder {
   private String p2pListenInterface = NetworkUtility.INADDR_ANY;
   private int p2pListenPort;
   private NatMethod natMethod = NatMethod.AUTO;
-  private String natManagerPodName;
+  private String natManagerServiceName;
+  private boolean natMethodFallbackEnabled;
   private int maxPeers;
   private boolean limitRemoteWireConnectionsEnabled = false;
   private float fractionRemoteConnectionsAllowed;
   private EthNetworkConfig ethNetworkConfig;
 
+  private String ethstatsUrl;
+  private String ethstatsContact;
   private JsonRpcConfiguration jsonRpcConfiguration;
   private GraphQLConfiguration graphQLConfiguration;
   private WebSocketConfiguration webSocketConfiguration;
@@ -192,8 +202,13 @@ public class RunnerBuilder {
     return this;
   }
 
-  public RunnerBuilder natManagerPodName(final String natManagerPodName) {
-    this.natManagerPodName = natManagerPodName;
+  public RunnerBuilder natManagerServiceName(final String natManagerServiceName) {
+    this.natManagerServiceName = natManagerServiceName;
+    return this;
+  }
+
+  public RunnerBuilder natMethodFallbackEnabled(final boolean natMethodFallbackEnabled) {
+    this.natMethodFallbackEnabled = natMethodFallbackEnabled;
     return this;
   }
 
@@ -211,6 +226,16 @@ public class RunnerBuilder {
   public RunnerBuilder fractionRemoteConnectionsAllowed(
       final float fractionRemoteConnectionsAllowed) {
     this.fractionRemoteConnectionsAllowed = fractionRemoteConnectionsAllowed;
+    return this;
+  }
+
+  public RunnerBuilder ethstatsUrl(final String ethstatsUrl) {
+    this.ethstatsUrl = ethstatsUrl;
+    return this;
+  }
+
+  public RunnerBuilder ethstatsContact(final String ethstatsContact) {
+    this.ethstatsContact = ethstatsContact;
     return this;
   }
 
@@ -351,7 +376,8 @@ public class RunnerBuilder {
             .orElse(bannedNodes);
 
     LOG.info("Detecting NAT service.");
-    final NatService natService = new NatService(buildNatManager(natMethod));
+    final boolean fallbackEnabled = natMethod == NatMethod.AUTO || natMethodFallbackEnabled;
+    final NatService natService = new NatService(buildNatManager(natMethod), fallbackEnabled);
     final NetworkBuilder inactiveNetwork = (caps) -> new NoopP2PNetwork();
     final NetworkBuilder activeNetwork =
         (caps) ->
@@ -398,6 +424,8 @@ public class RunnerBuilder {
             .privacyParameters(privacyParameters)
             .build();
     vertx.deployVerticle(filterManager);
+
+    createPrivateTransactionObserver(filterManager, privacyParameters);
 
     final P2PNetwork peerNetwork = networkRunner.getNetwork();
 
@@ -453,7 +481,8 @@ public class RunnerBuilder {
               webSocketConfiguration,
               metricsConfiguration,
               natService,
-              besuPluginContext.getNamedPlugins());
+              besuPluginContext.getNamedPlugins(),
+              dataDir);
       jsonRpcHttpService =
           Optional.of(
               new JsonRpcHttpService(
@@ -517,10 +546,11 @@ public class RunnerBuilder {
               webSocketConfiguration,
               metricsConfiguration,
               natService,
-              besuPluginContext.getNamedPlugins());
+              besuPluginContext.getNamedPlugins(),
+              dataDir);
 
       final SubscriptionManager subscriptionManager =
-          createSubscriptionManager(vertx, transactionPool);
+          createSubscriptionManager(vertx, transactionPool, blockchainQueries);
 
       createLogsSubscriptionService(
           context.getBlockchain(),
@@ -544,11 +574,32 @@ public class RunnerBuilder {
                   protocolSchedule,
                   blockchainQueries,
                   transactionPool));
+
+      createPrivateTransactionObserver(subscriptionManager, privacyParameters);
     }
 
     Optional<MetricsService> metricsService = Optional.empty();
     if (metricsConfiguration.isEnabled() || metricsConfiguration.isPushEnabled()) {
       metricsService = Optional.of(createMetricsService(vertx, metricsConfiguration));
+    }
+
+    final Optional<EthStatsService> ethStatsService;
+    if (!Strings.isNullOrEmpty(ethstatsUrl)) {
+      ethStatsService =
+          Optional.of(
+              new EthStatsService(
+                  NetstatsUrl.fromParams(ethstatsUrl, ethstatsContact),
+                  blockchainQueries,
+                  besuController.getProtocolManager(),
+                  transactionPool,
+                  miningCoordinator,
+                  besuController.getSyncState(),
+                  vertx,
+                  BesuInfo.nodeName(identityString),
+                  besuController.getGenesisConfigOptions(),
+                  network));
+    } else {
+      ethStatsService = Optional.empty();
     }
 
     return new Runner(
@@ -560,6 +611,7 @@ public class RunnerBuilder {
         webSocketService,
         stratumServer,
         metricsService,
+        ethStatsService,
         besuController,
         dataDir,
         pidPath,
@@ -627,7 +679,7 @@ public class RunnerBuilder {
         return Optional.of(
             new DockerNatManager(p2pAdvertisedHost, p2pListenPort, jsonRpcConfiguration.getPort()));
       case KUBERNETES:
-        return Optional.of(new KubernetesNatManager(natManagerPodName));
+        return Optional.of(new KubernetesNatManager(natManagerServiceName));
       case NONE:
       default:
         return Optional.empty();
@@ -654,14 +706,15 @@ public class RunnerBuilder {
       final Set<Capability> supportedCapabilities,
       final Collection<RpcApi> jsonRpcApis,
       final FilterManager filterManager,
-      final Optional<AccountLocalConfigPermissioningController> accountWhitelistController,
-      final Optional<NodeLocalConfigPermissioningController> nodeWhitelistController,
+      final Optional<AccountLocalConfigPermissioningController> accountAllowlistController,
+      final Optional<NodeLocalConfigPermissioningController> nodeAllowlistController,
       final PrivacyParameters privacyParameters,
       final JsonRpcConfiguration jsonRpcConfiguration,
       final WebSocketConfiguration webSocketConfiguration,
       final MetricsConfiguration metricsConfiguration,
       final NatService natService,
-      final Map<String, BesuPlugin> namedPlugins) {
+      final Map<String, BesuPlugin> namedPlugins,
+      final Path dataDir) {
     final Map<String, JsonRpcMethod> methods =
         new JsonRpcMethodsFactory()
             .methods(
@@ -677,22 +730,26 @@ public class RunnerBuilder {
                 miningCoordinator,
                 metricsSystem,
                 supportedCapabilities,
-                accountWhitelistController,
-                nodeWhitelistController,
+                accountAllowlistController,
+                nodeAllowlistController,
                 jsonRpcApis,
                 privacyParameters,
                 jsonRpcConfiguration,
                 webSocketConfiguration,
                 metricsConfiguration,
                 natService,
-                namedPlugins);
+                namedPlugins,
+                dataDir);
     methods.putAll(besuController.getAdditionalJsonRpcMethods(jsonRpcApis));
     return methods;
   }
 
   private SubscriptionManager createSubscriptionManager(
-      final Vertx vertx, final TransactionPool transactionPool) {
-    final SubscriptionManager subscriptionManager = new SubscriptionManager(metricsSystem);
+      final Vertx vertx,
+      final TransactionPool transactionPool,
+      final BlockchainQueries blockchainQueries) {
+    final SubscriptionManager subscriptionManager =
+        new SubscriptionManager(metricsSystem, blockchainQueries.getBlockchain());
     final PendingTransactionSubscriptionService pendingTransactions =
         new PendingTransactionSubscriptionService(subscriptionManager);
     final PendingTransactionDroppedSubscriptionService pendingTransactionsRemoved =
@@ -729,6 +786,23 @@ public class RunnerBuilder {
     // monitoring private logs
     if (privacyParameters.isEnabled()) {
       blockchain.observeBlockAdded(logsSubscriptionService::checkPrivateLogs);
+    }
+  }
+
+  private void createPrivateTransactionObserver(
+      final PrivateTransactionObserver privateTransactionObserver,
+      final PrivacyParameters privacyParameters) {
+    // register privateTransactionObserver as observer of events fired by the onchain precompile.
+    if (privacyParameters.isOnchainPrivacyGroupsEnabled()
+        && privacyParameters.isMultiTenancyEnabled()) {
+      final OnChainPrivacyPrecompiledContract onchainPrivacyPrecompiledContract =
+          (OnChainPrivacyPrecompiledContract)
+              besuController
+                  .getProtocolSchedule()
+                  .getByBlockNumber(1)
+                  .getPrecompileContractRegistry()
+                  .get(Address.ONCHAIN_PRIVACY, Account.DEFAULT_VERSION);
+      onchainPrivacyPrecompiledContract.addPrivateTransactionObserver(privateTransactionObserver);
     }
   }
 

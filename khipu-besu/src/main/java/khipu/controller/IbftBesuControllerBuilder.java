@@ -43,6 +43,7 @@ import org.hyperledger.besu.consensus.ibft.statemachine.IbftController;
 import org.hyperledger.besu.consensus.ibft.statemachine.IbftFinalState;
 import org.hyperledger.besu.consensus.ibft.statemachine.IbftRoundFactory;
 import org.hyperledger.besu.consensus.ibft.validation.MessageValidatorFactory;
+import org.hyperledger.besu.controller.IbftQueryPluginServiceFactory;
 import org.hyperledger.besu.controller.PluginServiceFactory;
 import org.hyperledger.besu.ethereum.ProtocolContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.methods.JsonRpcMethods;
@@ -102,6 +103,7 @@ public class IbftBesuControllerBuilder extends BesuControllerBuilder {
     final MutableBlockchain blockchain = protocolContext.getBlockchain();
     final IbftExecutors ibftExecutors = IbftExecutors.create(metricsSystem);
 
+    final Address localAddress = Util.publicKeyToAddress(nodeKey.getPublicKey());
     final IbftBlockCreatorFactory blockCreatorFactory =
         new IbftBlockCreatorFactory(
             gasLimitCalculator,
@@ -109,7 +111,8 @@ public class IbftBesuControllerBuilder extends BesuControllerBuilder {
             protocolContext,
             protocolSchedule,
             miningParameters,
-            Util.publicKeyToAddress(nodeKey.getPublicKey()));
+            localAddress,
+            ibftConfig.getMiningBeneficiary().map(Address::fromHexString).orElse(localAddress));
 
     // NOTE: peers should not be used for accessing the network as it does not enforce the
     // "only send once" filter applied by the UniqueMessageMulticaster.
